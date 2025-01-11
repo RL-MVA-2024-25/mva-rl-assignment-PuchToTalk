@@ -95,6 +95,10 @@ class ProjectAgent:
         device = torch.device('cpu')
         self.model = DQN(state_dim, config['nb_neurons'], self.nb_actions).to(device)
         path = "./models/model_1.pt"
+        
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Model file not found at {path}. Ensure the model is trained and saved before loading.")
+
         try:
 
             self.model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
@@ -103,6 +107,7 @@ class ProjectAgent:
 
             print("Loading without weights_only due to older PyTorch version...")
             self.model.load_state_dict(torch.load(path, map_location=device))
+
         self.model.eval()
 
     def greedy_action(self, network, state):
