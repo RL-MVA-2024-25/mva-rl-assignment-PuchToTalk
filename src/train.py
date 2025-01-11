@@ -94,7 +94,7 @@ class ProjectAgent:
     def load(self):
         device = torch.device('cpu')
         self.model = DQN(state_dim, config['nb_neurons'], self.nb_actions).to(device)
-        path = "./models/model_1.pt"
+        path = os.getcwd() + "/models/model_1.pt"
         
         if not os.path.exists(path):
             raise FileNotFoundError(f"Model file not found at {path}. Ensure the model is trained and saved before loading.")
