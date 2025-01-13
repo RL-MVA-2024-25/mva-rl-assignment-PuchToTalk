@@ -8,35 +8,7 @@ import random
 import numpy as np
 import os
 
-
-env_df = TimeLimit(HIVPatient(domain_randomization=False), max_episode_steps=200)
-env_rd = TimeLimit(HIVPatient(domain_randomization=True), max_episode_steps=200)
-
-state_dim = env_df.observation_space.shape[0]
-
-
-class ReplayBuffer:
-    def __init__(self, capacity, device):
-        self.capacity = capacity
-        self.data = []
-        self.index = 0
-        self.device = device
-
-    def append(self, s, a, r, s_, d):
-        if len(self.data) < self.capacity:
-            self.data.append(None)
-        self.data[self.index] = (s, a, r, s_, d)
-        self.index = (self.index + 1) % self.capacity
-
-    def sample(self, batch_size):
-        batch = random.sample(self.data, batch_size)
-        return list(map(lambda x: torch.Tensor(np.array(x)).to(self.device), list(zip(*batch))))
-
-    def __len__(self):
-        return len(self.data)
-
-
-# DQN Model
+# DQN Model (more complex)
 class DQN(nn.Module):
     def __init__(self, state_dim, nb_neurons, n_action):
         super(DQN, self).__init__()
@@ -49,13 +21,22 @@ class DQN(nn.Module):
             nn.ReLU(),
             nn.Linear(nb_neurons, nb_neurons),
             nn.ReLU(),
+            nn.Linear(nb_neurons, nb_neurons), 
+            nn.ReLU(),
             nn.Linear(nb_neurons, nb_neurons),
             nn.ReLU(),
-            nn.Linear(nb_neurons, n_action)
+            nn.Linear(nb_neurons, nb_neurons), 
+            nn.ReLU(),
+            nn.Linear(nb_neurons, n_action) 
         )
 
     def forward(self, x):
         return self.layers(x)
+
+# Env config
+env_df = TimeLimit(HIVPatient(domain_randomization=False), max_episode_steps=200)
+env_rd = TimeLimit(HIVPatient(domain_randomization=True), max_episode_steps=200)
+state_dim = env_df.observation_space.shape[0]
 
 
 class ProjectAgent:
@@ -76,7 +57,7 @@ class ProjectAgent:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config['learning_rate'])
         self.nb_gradient_steps = config['gradient_steps']
         self.update_target = config['update_target']
-        self.best_model_path = "./models/model_1.pt" 
+        self.best_model_path = "./models/model_4.pt" 
 
         os.makedirs(os.path.dirname(self.best_model_path), exist_ok=True)
 
@@ -88,17 +69,16 @@ class ProjectAgent:
 
     def save(self, path=None):
         path = path or self.best_model_path
+        directory = os.path.dirname(path)
+        if not os.path.exists(directory):
+            os.makedirs(directory) 
         torch.save(self.model.state_dict(), path)
         print(f"Model saved to {path}")
 
     def load(self):
         device = torch.device('cpu')
         self.model = DQN(state_dim, config['nb_neurons'], self.nb_actions).to(device)
-        path = os.getcwd() + "/models/model_1.pt"
-        
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Model file not found at {path}. Ensure the model is trained and saved before loading.")
-
+        path = "./models/model_4.pt"
         try:
 
             self.model.load_state_dict(torch.load(path, map_location=device, weights_only=True))
@@ -107,7 +87,6 @@ class ProjectAgent:
 
             print("Loading without weights_only due to older PyTorch version...")
             self.model.load_state_dict(torch.load(path, map_location=device))
-
         self.model.eval()
 
     def greedy_action(self, network, state):
@@ -126,6 +105,20 @@ class ProjectAgent:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+    
+    def display_learning_curve(self, rewards_per_episode):
+        """
+        Plot the learning curve based on total rewards per episode.
+        """
+        plt.figure(figsize=(10, 6))
+        plt.plot(rewards_per_episode, label="Total reward")
+        plt.xlabel("Episodes")
+        plt.ylabel("Total Reward")
+        plt.title("Learning curve")
+        plt.legend()
+        plt.grid()
+        plt.show()
+
 
     def train(self):
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -172,31 +165,39 @@ class ProjectAgent:
 
 
         print("Training completed. Saving model...")
-        self.save("./models/model_1.pt")
-        print(f"Model saved to ./models/model_1.pt")
+        self.save("./models/model_4.pt")
+        print(f"Model saved to ./models/model_4.pt")
 
 
-        #self.display_learning_curve(rewards_per_episode)
+        #self.display_learning_curve(rewards_per_episode) # display the curve to observe the peak 
 
 
 
-    def display_learning_curve(self, rewards_per_episode):
-        """
-        Plot the learning curve based on total rewards per episode.
-        """
-        plt.figure(figsize=(10, 6))
-        plt.plot(rewards_per_episode, label="Total Reward")
-        plt.xlabel("Episodes")
-        plt.ylabel("Total Reward")
-        plt.title("Learning Curve")
-        plt.legend()
-        plt.grid()
-        plt.show()
+class ReplayBuffer:
+    def __init__(self, capacity, device):
+        self.capacity = capacity
+        self.data = []
+        self.index = 0
+        self.device = device
+
+    def append(self, s, a, r, s_, d):
+        if len(self.data) < self.capacity:
+            self.data.append(None)
+        self.data[self.index] = (s, a, r, s_, d)
+        self.index = (self.index + 1) % self.capacity
+
+    def sample(self, batch_size):
+        batch = random.sample(self.data, batch_size)
+        return list(map(lambda x: torch.Tensor(np.array(x)).to(self.device), list(zip(*batch))))
+
+    def __len__(self):
+        return len(self.data)
 
 
+# Play with the parameters
 config = {
     'nb_actions': env_df.action_space.n,
-    'max_episode': 2000,
+    'max_episode': 5000,
     'learning_rate': 0.0005,
     'gamma': 0.99,
     'buffer_size': 1000000,
@@ -211,8 +212,8 @@ config = {
     'nb_neurons': 256
 }
 
+
 """
-# Main Entry
 if __name__ == "__main__":
     agent = ProjectAgent()
     print("Starting training...")
